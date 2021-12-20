@@ -1,0 +1,165 @@
+=======================CODE ===============
+
+cas jonathan;
+caslib _all_ assign;
+libname libr cas caslib=CASUSER;
+%global nb_topics ;
+                                                      /* 3*/
+proc cas;                                            
+   loadtable caslib="ReferenceData" path="en_stoplist.sashdat" casOut={caslib="ReferenceData",name="en_stoplist",replace=True}; 
+   run;
+quit;
+
+
+
+data libr.SYNONYMS;
+input Term :$20. Parent :$20. ;
+infile cards dlm="	" truncover;
+cards;
+covid_19	covid19
+covid-19	covid19
+covid	covid19
+covid19	covid19
+coronavirus	covid19
+corona virus	covid19
+corona	covid19
+covid 19	covid19
+sarscov2	covid19
+;
+run;
+
+
+data Public.VACCIN_COVID19_SENTIMENT;
+set Public.VACCIN_COVID19_SENTIMENT;
+if missing(text)=0;
+run;
+proc cas;                                             /* 4*/
+
+   loadactionset "textMining";                  
+   action tmMine;
+   param
+   docId="docid"
+   documents={ name="VACCIN_COVID19_SENTIMENT",caslib="Public"}
+   text="text"
+   nounGroups= True
+   tagging = True
+   stemming= True
+   stopList ={ name="en_stoplist"}
+   parseConfig={name="config", replace=TRUE}
+   parent ={ name="parent",replace=TRUE}
+   offset ={name="offset",replace=TRUE}
+   terms ={ name="terms", replace=TRUE}
+   reduce=10
+   synonyms={name="SYNONYMS",caslib="libr"}
+
+   docPro ={ name="docpro", replace=TRUE}
+   u ={ name="svdu", replace=TRUE}
+
+   ;
+   run;
+quit;
+
+data libr.TERMS;
+set libr.TERMS;
+if _Role_ not in ("PUNC","nlpNounGroup","NUM","INT");
+run;
+
+proc fedsql sessref=jonathan;
+create table libr.PARENT {options replace=true} as 
+select t2.* from libr.TERMS t1 left join libr.PARENT t2 on t1._termnum_=t2._termnum_ where t2._document_ is not null; 
+quit;
+
+
+
+proc CAS;
+    loadactionset "textMining";         
+textMining.tmSvd /
+      parent={ name="parent",caslib="libr"}
+      terms={name="terms",caslib="libr"}
+      k=&nb_topics.
+      u ={name="svdu", replace=TRUE}
+      numLabels=5
+      topics={name="topicsSVD",replace=TRUE}
+	  config={name="Config"}
+   ;
+
+                                                              /* 2*/
+
+    action tmScore;
+    param
+       docId="docid"
+       documents={name="VACCIN_COVID19_SENTIMENT",caslib="Public"}
+       text="text"
+       terms={name="terms"}
+       parseConfig={name="config"}
+       u={name="svdu"}
+       docPro ={ name="scoreDocpro", replace=TRUE}
+       topics={name="topicsSVD"}
+       topicDecision=True
+   ;
+   action table.fetch /table="scoreDocpro" orderBy="docid";     /* 3*/
+   run;
+
+quit;
+
+proc sort data=libr.SCOREDOCPRO out=work.__tmp__;
+by docid;
+run;
+
+proc transpose data=work.__tmp__ out=libr.SCOREDOCTRSP(drop=_Label_ 
+		rename=(col1=Score_topics)) name=_Level_;
+	var _Col1_ _Col2_ _Col3_;
+	by docid;
+run;
+
+proc delete data=WORK.__tmp__;
+run;
+
+
+data libr.SCOREDOCTRSP;
+set libr.SCOREDOCTRSP;
+_TopicID_=input(substr(_Level_,5,1),8.);
+
+run;
+
+%if %sysfunc(exist(Public.SCOREDOCTOPICS)) %then %do;
+proc casutil;
+droptable casdata="SCOREDOCTOPICS" incaslib="Public" quiet;
+quit;
+%end;
+
+data Public.SCOREDOCTOPICS(promote=yes);
+merge libr.SCOREDOCTRSP libr.TOPICSSVD;
+by _TopicID_;
+run;
+proc CAS;
+   action table.fetch /table="SCOREDOCTOPICS" caslib="Public" to=10;     /* 3*/
+quit;
+
+cas jonathan terminate;
+
+
+
+==========================XML=====================
+<!DOCTYPE html>
+<head>
+<title>Topics vaccination Execution</title>
+</head>
+<body>
+<h1>Select the number of topics to apply</h1>
+<form action="/SASJobExecution/" target="_self">
+<input type="hidden" name="_program" value="/Users/jonathan/My Folder/My Tasks/Sample HMEQ Job">
+<input type="hidden" name="_action" value="execute">
+
+<label>Number of topics : </label><input type="number" name="nb_topics" min="0" max="100">
+<br><br>
+
+
+
+<br/>
+<br/>
+<input type="submit" value="Run">
+</form>
+</body>
+</html>
+
