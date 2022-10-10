@@ -1,0 +1,151 @@
+/* Le code du template SAS va ici */
+/*%let inTbl2Prf=PUBLIC.DVF;
+%let Cols2Prf=idmutation;
+%let intervalVar=valeurfonc;
+%let diff=10;
+%let outputtable1=CASUSER.TEST;*/
+
+%macro dupplic_interval;
+
+%let ColumnAll= ;
+%do i=1 %to &Cols2Prf_count;
+%let ColumnAll=&ColumnAll &&Cols2Prf_%trim(&i.)_name;
+
+%end;
+%put &ColumnAll;
+
+%put "Checkbox1" &Checkbox1. "Checkbox2" &checkbox2.;
+	%let group 	 = &ColumnAll;
+	%let variable= &intervalVar_1_name;
+	/*%let diff0 	 = %sysfunc(dequote(&interval));
+	%let diff 	 = %eval(&diff0);*/
+/*
+%put "Group= " &group;
+%put "variable= " &variable;
+%put "diff = " %eval(&diff + 1);
+*/
+/*
+	%let libout  = _prfdm3;
+	%let tableout= _tmp_dq_dups_clustering;
+*/
+	%let _file = "/tmp/Dupp_Prep.sas";
+	/**************| on Viya2Go |**************/
+	/* "/shared-data/files_POC/Work/&SYSUSERID./Dupp_Prep.sas"; */
+
+	/**************| on demo.demos.sasviyafabric.wopla.io |**************/
+	/*"/nfs/home/&SYSUSERID./FILES_POC/Dupp_Prep.sas"; */
+
+	data _NULL_;
+		group_by=compbl(tranwrd(tranwrd(left(symget('group')),","," "), symget('variable'), ""));
+	put "group_by == " group_by;
+		groupby_tmp=tranwrd(compbl(strip(group_by))," ","_tmp ")||"_tmp";
+	put "groupby_tmp == " groupby_tmp;
+	
+		variable_tmp=left(symget('variable'))||'_tmp';
+		put groupby_tmp variable_tmp;
+
+		call symput('grouptmp',groupby_tmp);
+		call symput('vartmp',variable_tmp);
+		call symput('groupby',group_by);
+
+		call symputx('sel_vars', strip(symget('group')));
+	run;
+/*%put "sel_vars == " &sel_vars;*/
+
+	data _NULL_;
+		file &_file;
+		/*"/shared-data/files_POC/file.sas";*/
+
+		length x1 $ 300 x11 $ 300;
+
+		x=compbl("data &outputtable1(drop= "||symget('grouptmp')||' '||symget('vartmp')||" clusterid_tmp diff_vf) / single=yes;
+		set &inTbl2Prf. ; by "||symget('groupby')||' descending '||symget('variable')||';
+		retain '||symget('grouptmp')||' '||symget('vartmp')||' 0 clusterid_tmp 0; 
+		diff_vf='||symget('vartmp')||'-'||symget('variable')||';');
+		x1='if 0 =< diff_vf =< '||symget('diff');
+		x11='';
+		do i = 1 to countw(symget('groupby'));
+		x1=compbl(catt(x1,' and '||scan(symget('groupby'),i)||'='||scan(symget('grouptmp'),i)));
+		x11=compbl(catt(x11,scan(symget('grouptmp'),i)||'='||scan(symget('groupby'),i)||';'));
+		end;
+		x2=' then do; ClusterId=clusterid_tmp;     end;
+		    else do;
+		        ClusterId = clusterid_tmp + 1;
+		        clusterid_tmp = ClusterId; ';
+		x3=compbl('end;'||symget('vartmp')||'='||symget('variable')||';run;');
+		put x;
+		put x1;
+		put x2;
+		put x11;
+		put x3;
+	run;
+	%include &_file;
+
+
+%if &checkbox1.=1 %then %do;
+
+
+
+	proc sql ;
+		create table _TMP_DTA_PRF_DUPS_DET as
+			SELECT *,count(*) as cpt
+			FROM &outputtable1.
+			GROUP BY clusterID ;
+	quit;
+
+data &outputtable1.;
+set _TMP_DTA_PRF_DUPS_DET;
+if cpt>1;
+drop cpt;
+run;
+
+proc delete data=_TMP_DTA_PRF_DUPS_DET;
+run;
+%end;
+
+%if &checkbox1.=1 and &checkbox2.=1 %then %do;
+proc sort data=&outputtable1. out=TOPRINT(keep=&UniqueId_1_name. ClusterId &group &Variable );
+by ClusterId;
+run;
+proc print data=TOPRINT ;
+by ClusterId;
+var &UniqueId_1_name. &group &Variable ;
+run;
+
+proc delete data=toprint;
+run;
+%end;
+%else %if &checkbox1.=0 and &checkbox2.=1 %then %do;
+
+	proc sql ;
+		create table TOPRINT as
+			SELECT *
+			FROM &outputtable1.
+			GROUP BY clusterID 
+HAVING count(*) > 1
+ORDER BY CLUSTERID
+ ;
+	quit;
+
+proc print data=TOPRINT ;
+by ClusterId;
+var &UniqueId_1_name. &group &Variable ;
+run;
+
+proc delete data=toprint;
+run;
+%end;
+	/* Removing the generated SAS code 
+	%if %sysfunc(fileexist(&_file)) ge 1 %then %do;
+		%let rc=%sysfunc(filename(temp, &_file));
+		%let rc=%sysfunc(fdelete(&temp));
+		%let _file="";
+		%let rc=%sysfunc(filename(temp, &_file));
+	%end;
+	%else %do;
+		%put The file &_file does not exist;
+	%end;
+
+	libname _prfdm3 clear;*/
+%mend dupplic_interval;
+%dupplic_interval;
