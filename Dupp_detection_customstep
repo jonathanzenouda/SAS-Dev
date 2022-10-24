@@ -1,9 +1,4 @@
-/* Le code du template SAS va ici */
-/*%let inTbl2Prf=PUBLIC.DVF;
-%let Cols2Prf=idmutation;
-%let intervalVar=valeurfonc;
-%let diff=10;
-%let outputtable1=CASUSER.TEST;*/
+
 options nomerror noserror ;
 %macro dupplic_interval;
 
@@ -36,11 +31,11 @@ options nomerror noserror ;
 
 		call symputx('sel_vars', strip(symget('group')));
 	run;
-/*%put "sel_vars == " &sel_vars;*/
+
 
 	data _NULL_;
 		file &_file;
-		/*"/shared-data/files_POC/file.sas";*/
+
 
 		length x1 $ 300 x11 $ 300;
 
@@ -82,17 +77,17 @@ options nomerror noserror ;
 		put groupby_tmp ;
 
 		call symput('grouptmp',groupby_tmp);
-		*call symput('vartmp',variable_tmp);
+
 		call symput('groupby',group_by);
 
 		call symputx('sel_vars', strip(symget('group')));
 	run;
-/*%put "sel_vars == " &sel_vars;*/
+
 
 %let VarAll=&ColumnAll;
 	data _NULL_;
 		file &_file;
-		/*"/shared-data/files_POC/file.sas";*/
+
 
 		length x1 $ 300 x11 $ 300;
 x=compbl("data &outputtable1.(drop= "||symget('grouptmp')||' '||" clusterid_tmp) / single=yes;
@@ -152,7 +147,7 @@ by ClusterId;
 run;
 proc print data=TOPRINT ;
 by ClusterId;
-var &UniqueId_1_name. &group &Variable ;
+var &UniqueId_1_name. &group &VarAll. ;
 run;
 
 proc delete data=toprint;
